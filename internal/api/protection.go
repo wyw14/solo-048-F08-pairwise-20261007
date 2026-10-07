@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -21,6 +22,53 @@ func (a *App) stopAntifreeze(w http.ResponseWriter, r *http.Request) {
 	session, err := a.Antifreeze.Stop(chi.URLParam(r, "stationID"))
 	if err != nil {
 		writeError(w, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, session)
+}
+
+func (a *App) getAntifreeze(w http.ResponseWriter, r *http.Request) {
+	session, err := a.Antifreeze.Session(chi.URLParam(r, "stationID"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, session)
+}
+
+func (a *App) listAntifreeze(w http.ResponseWriter, _ *http.Request) {
+	sessions, err := a.Antifreeze.Sessions()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"sessions": sessions,
+		"recovery": a.AntifreezeRecovery,
+	})
+}
+
+func (a *App) resumeAntifreeze(w http.ResponseWriter, r *http.Request) {
+	session, err := a.Antifreeze.Resume(r.Context(), chi.URLParam(r, "stationID"))
+	if err != nil {
+		if errors.Is(err, protection.ErrNoSession) {
+			writeError(w, http.StatusNotFound, err)
+		} else {
+			writeError(w, http.StatusConflict, err)
+		}
+		return
+	}
+	writeJSON(w, http.StatusAccepted, session)
+}
+
+func (a *App) abandonAntifreeze(w http.ResponseWriter, r *http.Request) {
+	session, err := a.Antifreeze.Abandon(chi.URLParam(r, "stationID"))
+	if err != nil {
+		if errors.Is(err, protection.ErrNoSession) {
+			writeError(w, http.StatusNotFound, err)
+		} else {
+			writeError(w, http.StatusConflict, err)
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, session)

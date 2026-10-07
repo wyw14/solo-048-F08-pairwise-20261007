@@ -19,12 +19,20 @@ func NewCirculationRunner(pumps *pump.Runner) *CirculationRunner {
 	return &CirculationRunner{pumps: pumps, errors: make(map[string]error)}
 }
 
-func (r *CirculationRunner) Run(ctx context.Context, stationID string, started chan<- struct{}) {
-	if err := r.pumps.Circulate(ctx, stationID, 5*time.Millisecond, started); err != nil && ctx.Err() == nil {
+// Run 执行循环直到 ctx 取消或循环自行退出。
+// ctx 取消返回 nil；循环自身异常时返回错误并同时记录在错误表中。
+func (r *CirculationRunner) Run(ctx context.Context, stationID string, started chan<- struct{}) error {
+	if err := r.pumps.Circulate(ctx, stationID, 5*time.Millisecond, started); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		wrapped := fmt.Errorf("antifreeze circulation: %w", err)
 		r.mu.Lock()
-		r.errors[stationID] = fmt.Errorf("antifreeze circulation: %w", err)
+		r.errors[stationID] = wrapped
 		r.mu.Unlock()
+		return wrapped
 	}
+	return nil
 }
 
 func (r *CirculationRunner) Running(stationID string) bool {

@@ -77,13 +77,18 @@ func (a *App) overview(w http.ResponseWriter, _ *http.Request) {
 	stationDetails := make(map[string]any)
 	for _, item := range a.Stations.List() {
 		lastCommand, _ := a.StationCommands.Last(item.ID)
-		stationDetails[item.ID] = map[string]any{
+		session, sessionErr := a.Antifreeze.Session(item.ID)
+		entry := map[string]any{
 			"flow_receipts":         a.FlowReceipts.ForStation(item.ID),
 			"last_command":          lastCommand,
 			"dispatch_pending":      a.DispatchBuffer.Pending(item.ID),
-			"antifreeze_cycles":     a.Circulation.Cycles(item.ID),
+			"antifreeze_cycles":     a.Antifreeze.Ticks(item.ID),
 			"frost_valve_available": a.Frost.Available(item.ID + "-return"),
 		}
+		if sessionErr == nil {
+			entry["antifreeze_session"] = session
+		}
+		stationDetails[item.ID] = entry
 	}
 	primaryAdmission, primaryOpen := a.Primary.Admission("xincheng", "B")
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -98,5 +103,6 @@ func (a *App) overview(w http.ResponseWriter, _ *http.Request) {
 			"east-bv-b": a.Boundaries.IsClosed("east-bv-b"),
 		},
 		"target_primary_admission": map[string]any{"open": primaryOpen, "proof": primaryAdmission},
+		"antifreeze_recovery":      a.AntifreezeRecovery,
 	})
 }

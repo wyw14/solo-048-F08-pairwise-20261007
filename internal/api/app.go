@@ -51,6 +51,7 @@ type App struct {
 	ExchangerSwitch      *exchanger.SwitchService
 	Circulation          *exchanger.CirculationRunner
 	Antifreeze           *protection.Antifreeze
+	AntifreezeRecovery   protection.RecoveryReport
 	Warmup               *exchanger.WarmupService
 	Isolation            *isolation.Service
 	IsolationCoordinator *isolation.Coordinator
@@ -102,7 +103,8 @@ func NewApp(dataDirectory string) (*App, error) {
 	flowReceipts := telemetry.NewFlowReceipts()
 	primary := valve.NewPrimaryService()
 	circulation := exchanger.NewCirculationRunner(pumpRunner)
-	antifreeze := protection.NewAntifreeze(circulation)
+	antifreezeSessions := protection.NewSessionStore(dataDirectory)
+	antifreeze := protection.NewAntifreeze(circulation, antifreezeSessions)
 	warmup := exchanger.NewWarmupService(stations)
 	relief := valve.NewReliefService(2 * time.Millisecond)
 	boundaries := valve.NewBoundaryService()
@@ -134,6 +136,16 @@ func NewApp(dataDirectory string) (*App, error) {
 	if err := app.seed(); err != nil {
 		return nil, err
 	}
+	knownStations := make(map[string]bool)
+	for _, item := range app.Stations.List() {
+		knownStations[item.ID] = true
+	}
+	// 识别上次进程遗留的防冻会话：优雅关闭的自动续跑，崩溃遗留的转人工确认。
+	recoveryReport, err := antifreeze.Recover(context.Background(), knownStations)
+	if err != nil {
+		return nil, err
+	}
+	app.AntifreezeRecovery = recoveryReport
 	return app, nil
 }
 
@@ -155,15 +167,5 @@ func (a *App) seed() error {
 }
 
 func (a *App) Close(ctx context.Context) error {
-	done := make(chan struct{})
-	go func() {
-		a.Antifreeze.Close()
-		close(done)
-	}()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-done:
-		return nil
-	}
+	return a.Antifreeze.Close(ctx)
 }
