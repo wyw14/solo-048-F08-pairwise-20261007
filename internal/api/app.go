@@ -30,6 +30,7 @@ type App struct {
 	NetworkRegistry      *network.Registry
 	Stations             *station.Registry
 	Snapshots            *store.StationSnapshotStore
+	AntifreezeSessions   *store.AntifreezeSessionStore
 	Interlock            *hydraulic.Interlock
 	Pumps                *pump.Service
 	PumpRunner           *pump.Runner
@@ -102,7 +103,8 @@ func NewApp(dataDirectory string) (*App, error) {
 	flowReceipts := telemetry.NewFlowReceipts()
 	primary := valve.NewPrimaryService()
 	circulation := exchanger.NewCirculationRunner(pumpRunner)
-	antifreeze := protection.NewAntifreeze(circulation)
+	antifreezeSessions := store.NewAntifreezeSessionStore(dataDirectory)
+	antifreeze := protection.NewAntifreeze(circulation, antifreezeSessions, events)
 	warmup := exchanger.NewWarmupService(stations)
 	relief := valve.NewReliefService(2 * time.Millisecond)
 	boundaries := valve.NewBoundaryService()
@@ -114,7 +116,7 @@ func NewApp(dataDirectory string) (*App, error) {
 	app := &App{
 		DataDirectory: dataDirectory, Events: events, Audit: recorder, AuditQuery: audit.NewQuery(events),
 		Network: networkState, Topology: topology, NetworkRegistry: networkRegistry, Stations: stations,
-		Snapshots: snapshots, Interlock: interlock, Pumps: pump.NewService(interlock, recorder),
+		Snapshots: snapshots, AntifreezeSessions: antifreezeSessions, Interlock: interlock, Pumps: pump.NewService(interlock, recorder),
 		PumpRunner: pumpRunner, Pressure: pressure, Valves: valve.NewService(interlock, recorder),
 		ValveOperations: valveOperations, Relief: relief, Boundaries: boundaries, Primary: primary,
 		Telemetry: telemetry.NewSeries(128), FlowReceipts: flowReceipts,
@@ -132,6 +134,9 @@ func NewApp(dataDirectory string) (*App, error) {
 	app.Reconnector = recovery.NewReconnector(dispatchBuffer, stations, stationCommands, recorder)
 	app.ZoneRecovery = recovery.NewZoneRecovery(networkState, networkRegistry, warmup, pressure)
 	if err := app.seed(); err != nil {
+		return nil, err
+	}
+	if err := app.Antifreeze.Recover(); err != nil {
 		return nil, err
 	}
 	return app, nil

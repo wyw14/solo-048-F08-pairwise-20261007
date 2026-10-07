@@ -28,6 +28,8 @@ func (a *App) Handler() http.Handler {
 		api.Post("/stations/{stationID}/exchangers/switch/{operationID}/advance", a.advanceExchangerSwitch)
 		api.Post("/stations/{stationID}/antifreeze", a.startAntifreeze)
 		api.Delete("/stations/{stationID}/antifreeze", a.stopAntifreeze)
+		api.Post("/stations/{stationID}/antifreeze/resume", a.resumeAntifreeze)
+		api.Get("/antifreeze", a.listAntifreezeSessions)
 		api.Post("/stations/{stationID}/manual-valve", a.startManualValve)
 		api.Delete("/stations/{stationID}/manual-valve/{operationID}", a.cancelManualValve)
 		api.Post("/stations/{stationID}/manual-valve/{operationID}/fail", a.failManualValve)

@@ -26,6 +26,24 @@ func (a *App) stopAntifreeze(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, session)
 }
 
+func (a *App) resumeAntifreeze(w http.ResponseWriter, r *http.Request) {
+	session, err := a.Antifreeze.Resume(chi.URLParam(r, "stationID"))
+	if err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, session)
+}
+
+func (a *App) listAntifreezeSessions(w http.ResponseWriter, _ *http.Request) {
+	sessions, err := a.Antifreeze.Sessions()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sessions)
+}
+
 func (a *App) listIncidents(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, a.Protection.List())
 }
